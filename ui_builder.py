@@ -8,12 +8,30 @@ drag_data = {"x": 0, "y": 0}
 preview_item = None
 is_dragging = False
 ui_objects = []
+selection_box = None
+
+text_entry = None
+font_size_entry = None
+fill_entry = None
+outline_entry = None
+properties_panel = None
+text_label = None
+font_label = None
+fill_label = None
+outline_label = None
+apply_btn = None
 
 def set_tool(tool):
     global current_tool
     current_tool = tool
 
 def create_canvas():
+    global properties_panel
+    global text_entry, font_size_entry
+    global fill_entry, outline_entry
+    global text_label, font_label
+    global fill_label, outline_label
+    global apply_btn
     try:
         ui_width = int(width_entry.get())
         ui_height = int(height_entry.get())
@@ -40,6 +58,52 @@ def create_canvas():
 
         tk.Button(toolbox, text="Oval", width=15,
                   command=lambda: set_tool("oval")).pack(pady=5)
+        
+        # ---- Properties Panel ----
+        properties_panel = tk.Frame(builder, width=200, bg="#f0f0f0")
+        properties_panel.pack(side="right", fill="y")
+
+        tk.Label(properties_panel, text="Properties",
+                bg="#f0f0f0",
+                font=("Arial", 12, "bold")).pack(pady=10)
+
+        # Text content
+        text_label = tk.Label(properties_panel, text="Text:", bg="#f0f0f0")
+        text_label.pack()
+        text_entry = tk.Entry(properties_panel)
+        text_entry.pack(pady=5)
+
+        # Font size
+        font_label = tk.Label(properties_panel, text="Font Size:", bg="#f0f0f0")
+        font_label.pack()
+        font_size_entry = tk.Entry(properties_panel)
+        font_size_entry.pack(pady=5)
+
+        # Fill color
+        fill_label = tk.Label(properties_panel, text="Fill Color:", bg="#f0f0f0")
+        fill_label.pack()
+        fill_entry = tk.Entry(properties_panel)
+        fill_entry.pack(pady=5)
+
+        # Outline color
+        outline_label = tk.Label(properties_panel, text="Outline Color:", bg="#f0f0f0")
+        outline_label.pack()
+        outline_entry = tk.Entry(properties_panel)
+        outline_entry.pack(pady=5)
+
+        # Apply button
+        apply_btn = tk.Button(
+            properties_panel,
+            text="Apply Changes",
+            command=lambda: apply_properties(
+                canvas,
+                text_entry,
+                font_size_entry,
+                fill_entry,
+                outline_entry
+            )
+        )
+        apply_btn.pack(pady=10)
 
         # =========================
         # Right Container (Canvas + Button)
@@ -112,6 +176,42 @@ def create_canvas():
     except ValueError:
         messagebox.showerror("Invalid Input", "Enter valid numbers")
 
+def apply_properties(canvas, text_entry, font_size_entry, fill_entry, outline_entry):
+    global selected_item
+
+    if not selected_item:
+        return
+
+    for obj in ui_objects:
+        if obj["id"] == selected_item:
+
+            # ----- TEXT UPDATE -----
+            new_text = text_entry.get()
+            if new_text:
+                canvas.itemconfig(selected_item, text=new_text)
+                obj["text"] = new_text
+
+            # ----- FONT SIZE -----
+            new_font_size = font_size_entry.get()
+            if new_font_size:
+                canvas.itemconfig(selected_item,
+                                  font=("Arial", int(new_font_size)))
+                obj["font_size"] = int(new_font_size)
+
+            # ----- FILL COLOR -----
+            new_fill = fill_entry.get()
+            if new_fill:
+                canvas.itemconfig(selected_item, fill=new_fill)
+                obj["fill"] = new_fill
+
+            # ----- OUTLINE COLOR -----
+            new_outline = outline_entry.get()
+            if new_outline:
+                canvas.itemconfig(selected_item, outline=new_outline)
+                obj["outline"] = new_outline
+
+            break
+
 def place_item(event, canvas):
     global selected_item, current_tool
 
@@ -176,14 +276,33 @@ def generate_c_code():
 
     c_code += f"#define UI_OBJECT_COUNT {len(ui_objects)}\n\n"
     c_code += "UI_Object ui_objects[] = {\n"
-
+    
     for obj in ui_objects:
+
+        fill = obj.get("fill", "0xFFFF")
+        outline = obj.get("outline", "0x0000")
+        font_size = obj.get("font_size", 12)
+
         if obj["type"] == "RECTANGLE":
-            c_code += f'    {{UI_RECTANGLE, {obj["x"]}, {obj["y"]}, {obj["width"]}, {obj["height"]}, ""}},\n'
+            c_code += (
+                f'    {{UI_RECTANGLE, {obj["x"]}, {obj["y"]}, '
+                f'{obj["width"]}, {obj["height"]}, '
+                f'{fill}, {outline}, 0, ""}},\n'
+            )
+
         elif obj["type"] == "OVAL":
-            c_code += f'    {{UI_OVAL, {obj["x"]}, {obj["y"]}, {obj["width"]}, {obj["height"]}, ""}},\n'
+            c_code += (
+                f'    {{UI_OVAL, {obj["x"]}, {obj["y"]}, '
+                f'{obj["width"]}, {obj["height"]}, '
+                f'{fill}, {outline}, 0, ""}},\n'
+            )
+
         elif obj["type"] == "TEXT":
-            c_code += f'    {{UI_TEXT, {obj["x"]}, {obj["y"]}, 0, 0, "{obj["text"]}"}},\n'
+            c_code += (
+                f'    {{UI_TEXT, {obj["x"]}, {obj["y"]}, '
+                f'0, 0, {fill}, 0x0000, {font_size}, '
+                f'"{obj["text"]}"}},\n'
+            )
 
     c_code += "};\n"
 
@@ -265,7 +384,10 @@ def handle_click(event, canvas):
                 "y": event.y,
                 "width": 100,
                 "height": 50,
-                "text": ""
+                "text": "",
+                "font_size": 0,
+                "fill": "skyblue",
+                "outline": "black"
             })
 
         # OVAL
@@ -303,7 +425,10 @@ def handle_click(event, canvas):
                 "y": event.y,
                 "width": 0,
                 "height": 0,
-                "text": "Sample Text"
+                "text": "Sample Text",
+                "font_size": 12,
+                "fill": "black",
+                "outline": ""
             })
 
         # Remove preview
@@ -320,11 +445,36 @@ def handle_click(event, canvas):
 
     if clicked and "draggable" in canvas.gettags(clicked[0]):
         selected_item = clicked[0]
+        item_type = canvas.type(selected_item)
+
+        # ---- Highlight selected object ----
+        highlight_selected(canvas, selected_item)
+
+        # ---- Show only relevant properties ----
+        update_properties_visibility(item_type)
+
+        # ---- POPULATE PROPERTY FIELDS ----
+        if item_type == "text":
+            text_entry.delete(0, tk.END)
+            text_entry.insert(0, canvas.itemcget(selected_item, "text"))
+            font_size_entry.delete(0, tk.END)
+            font_size_entry.insert(0, canvas.itemcget(selected_item, "font").split()[1])
+            fill_entry.delete(0, tk.END)
+            fill_entry.insert(0, canvas.itemcget(selected_item, "fill"))
+
+        elif item_type in ["rectangle", "oval"]:
+            fill_entry.delete(0, tk.END)
+            fill_entry.insert(0, canvas.itemcget(selected_item, "fill"))
+            outline_entry.delete(0, tk.END)
+            outline_entry.insert(0, canvas.itemcget(selected_item, "outline"))
+
         drag_data["x"] = event.x
         drag_data["y"] = event.y
         is_dragging = True
     else:
         selected_item = None
+        highlight_selected(canvas, None)
+        update_properties_visibility(None)
 
 def drag_item(event, canvas):
     global selected_item, is_dragging
@@ -334,6 +484,7 @@ def drag_item(event, canvas):
         dy = event.y - drag_data["y"]
 
         canvas.move(selected_item, dx, dy)
+        highlight_selected(canvas, selected_item)
 
         drag_data["x"] = event.x
         drag_data["y"] = event.y
@@ -371,6 +522,82 @@ def send_to_back(canvas):
         canvas.tag_lower(selected_item)
         canvas.tag_raise(selected_item, "ui_area")
 
+def highlight_selected(canvas, item_id):
+    global selection_box
+
+    # Remove old selection box
+    if selection_box:
+        canvas.delete(selection_box)
+        selection_box = None
+
+    if not item_id:
+        return
+
+    # Get bounding box of item
+    bbox = canvas.bbox(item_id)
+    if not bbox:
+        return
+
+    x1, y1, x2, y2 = bbox
+
+    # Create dashed blue border
+    selection_box = canvas.create_rectangle(
+        x1 - 4, y1 - 4,
+        x2 + 4, y2 + 4,
+        outline="blue",
+        dash=(4, 2),
+        width=2
+    )
+
+    # Keep selection border always on top
+    canvas.tag_raise(selection_box)
+
+def update_properties_visibility(item_type):
+    """
+    Show only the applicable property widgets based on the selected item type.
+    Hide all others.
+    """
+    # First hide everything
+    text_label.pack_forget()
+    text_entry.pack_forget()
+    font_label.pack_forget()
+    font_size_entry.pack_forget()
+    fill_label.pack_forget()
+    fill_entry.pack_forget()
+    outline_label.pack_forget()
+    outline_entry.pack_forget()
+    apply_btn.pack_forget()
+
+    if item_type == "text":
+        text_label.pack()
+        text_entry.pack(pady=5)
+        font_label.pack()
+        font_size_entry.pack(pady=5)
+        fill_label.pack()
+        fill_entry.pack(pady=5)
+        # Don't show outline for text!
+        # outline_label.pack_forget()
+        # outline_entry.pack_forget()
+        apply_btn.pack(pady=10)
+
+    elif item_type in ["rectangle", "oval"]:
+        # Shape-specific properties
+        fill_label.pack()
+        fill_entry.pack(pady=5)
+        outline_label.pack()
+        outline_entry.pack(pady=5)
+        apply_btn.pack(pady=10)
+
+    else:
+        text_label.pack_forget()
+        text_entry.pack_forget()
+        font_label.pack_forget()
+        font_size_entry.pack_forget()
+        fill_label.pack_forget()
+        fill_entry.pack_forget()
+        outline_label.pack_forget()
+        outline_entry.pack_forget()
+        apply_btn.pack_forget()
 
 
 # ---- Main Start Window ----
