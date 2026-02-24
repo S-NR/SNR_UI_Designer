@@ -1,5 +1,7 @@
+import json
+import os
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog, filedialog
 
 PADDING = 100
 current_tool = None
@@ -21,20 +23,136 @@ fill_label = None
 outline_label = None
 apply_btn = None
 
+# ---- Updated COLOR MAP ----
+COLOR_MAP = {
+    "black": "#000000",
+    "white": "#FFFFFF",
+    "red": "#FF0000",
+    "green": "#00FF00",
+    "blue": "#0000FF",
+    "skyblue": "#87CEEB",
+    "yellow": "#FFFF00",
+    "cyan": "#00FFFF",
+    "magenta": "#FF00FF",
+    # add more as needed
+}
+
+current_project_name = None
+current_project_path = None
+canvas_width_global = 400
+canvas_height_global = 300
+
+def start_new_project():
+    global current_project_name, current_project_path
+
+    # 1️⃣ Ask Project Name
+    project_name = simpledialog.askstring("Project Name", "Enter your project name:")
+    if not project_name:
+        messagebox.showwarning("Cancelled", "Project creation cancelled!")
+        return False
+    current_project_name = project_name
+
+    # 2️⃣ Ask Project Path
+    project_path = filedialog.askdirectory(title="Select folder to save your project")
+    if not project_path:
+        messagebox.showwarning("Cancelled", "Project creation cancelled!")
+        return False
+    current_project_path = project_path
+
+    return True
+
+def create_ui_dimensions_window():
+    """
+    Ask user for UI dimensions after project is chosen.
+    """
+    def submit_dimensions():
+        try:
+            width = int(width_entry.get())
+            height = int(height_entry.get())
+            if width <= 0 or height <= 0:
+                raise ValueError
+            dimension_window.destroy()
+            create_canvas(width, height)
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Enter valid positive integers for width and height")
+
+    dimension_window = tk.Toplevel(root)
+    dimension_window.title("UI Dimensions")
+    dimension_window.geometry("300x150")
+
+    tk.Label(dimension_window, text="Enter UI Width:").pack(pady=5)
+    width_entry = tk.Entry(dimension_window)
+    width_entry.pack()
+
+    tk.Label(dimension_window, text="Enter UI Height:").pack(pady=5)
+    height_entry = tk.Entry(dimension_window)
+    height_entry.pack()
+
+    tk.Button(dimension_window, text="Submit", command=submit_dimensions).pack(pady=10)
+
+def launch_builder_flow():
+    """
+    Startup sequence: Project Name -> Path -> Dimensions -> Canvas
+    """
+    if start_new_project():
+        create_ui_dimensions_window()
+
+def color_to_rgb565(color_str):
+    """
+    Convert a color name or hex string to RGB565.
+    Accepts:
+        - Named colors from COLOR_MAP
+        - "#RRGGBB" or "0xRRGGBB"
+    Returns:
+        - Hex string in 0xFFFF format
+    """
+    if not color_str:
+        return "0xFFFF"  # default to white
+
+    color_str = color_str.strip().lower()
+
+    # Check if it's a named color
+    if color_str in COLOR_MAP:
+        color_str = COLOR_MAP[color_str]
+
+    # Remove # or 0x if present
+    if color_str.startswith("#"):
+        color_str = color_str[1:]
+    elif color_str.startswith("0x"):
+        color_str = color_str[2:]
+
+    # Must have exactly 6 hex digits
+    if len(color_str) != 6:
+        return "0xFFFF"
+
+    try:
+        r = int(color_str[0:2], 16)
+        g = int(color_str[2:4], 16)
+        b = int(color_str[4:6], 16)
+    except ValueError:
+        return "0xFFFF"
+
+    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+    return f"0x{rgb565:04X}"
+
 def set_tool(tool):
     global current_tool
     current_tool = tool
 
-def create_canvas():
+def create_canvas(ui_width, ui_height):
     global properties_panel
     global text_entry, font_size_entry
     global fill_entry, outline_entry
     global text_label, font_label
     global fill_label, outline_label
     global apply_btn
+        
+    global canvas_width_global, canvas_height_global
+    canvas_width_global = ui_width
+    canvas_height_global = ui_height
     try:
-        ui_width = int(width_entry.get())
-        ui_height = int(height_entry.get())
+        # ui_width = int(width_entry.get())
+        # ui_height = int(height_entry.get())
 
         canvas_width = ui_width + (PADDING * 2)
         canvas_height = ui_height + (PADDING * 2)
@@ -138,6 +256,16 @@ def create_canvas():
         bottom_frame = tk.Frame(right_container)
         bottom_frame.pack(fill="x", pady=10)
 
+        save_btn = tk.Button(
+            bottom_frame,
+            text="Save Project",
+            bg="#2196F3",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            command=save_project
+        )
+        save_btn.pack(side="left", padx=10)
+
         generate_btn = tk.Button(
             bottom_frame,
             text="Generate C Code",
@@ -146,7 +274,6 @@ def create_canvas():
             font=("Arial", 12, "bold"),
             command=generate_c_code
         )
-
         generate_btn.pack(side="right", padx=10)
 
         # =========================
@@ -175,6 +302,8 @@ def create_canvas():
 
     except ValueError:
         messagebox.showerror("Invalid Input", "Enter valid numbers")
+    
+    return canvas
 
 def apply_properties(canvas, text_entry, font_size_entry, fill_entry, outline_entry):
     global selected_item
@@ -259,54 +388,63 @@ def place_item(event, canvas):
 def generate_c_code():
     c_code = ""
 
+    # ----- Headers -----
+    c_code += "#include <stdint.h>\n\n"
+
+    # ----- Enum -----
     c_code += "typedef enum {\n"
     c_code += "    UI_RECTANGLE,\n"
     c_code += "    UI_OVAL,\n"
     c_code += "    UI_TEXT\n"
     c_code += "} UI_ObjectType;\n\n"
 
+    # ----- Struct -----
     c_code += "typedef struct {\n"
     c_code += "    UI_ObjectType type;\n"
     c_code += "    int x;\n"
     c_code += "    int y;\n"
     c_code += "    int width;\n"
     c_code += "    int height;\n"
+    c_code += "    uint16_t fill;        // RGB565 fill color\n"
+    c_code += "    uint16_t outline;     // RGB565 outline color\n"
+    c_code += "    int font_size;        // used only for TEXT\n"
     c_code += "    char text[50];\n"
     c_code += "} UI_Object;\n\n"
 
+    # ----- UI Object Count -----
     c_code += f"#define UI_OBJECT_COUNT {len(ui_objects)}\n\n"
-    c_code += "UI_Object ui_objects[] = {\n"
-    
-    for obj in ui_objects:
 
-        fill = obj.get("fill", "0xFFFF")
-        outline = obj.get("outline", "0x0000")
+    # ----- UI Objects Array -----
+    c_code += "UI_Object ui_objects[UI_OBJECT_COUNT] = {\n"
+
+    for obj in ui_objects:
+        # Convert fill and outline to RGB565
+        fill = color_to_rgb565(obj.get("fill", "white"))
+        outline = color_to_rgb565(obj.get("outline", "black"))
         font_size = obj.get("font_size", 12)
+        text_val = obj.get("text", "")
 
         if obj["type"] == "RECTANGLE":
             c_code += (
-                f'    {{UI_RECTANGLE, {obj["x"]}, {obj["y"]}, '
-                f'{obj["width"]}, {obj["height"]}, '
-                f'{fill}, {outline}, 0, ""}},\n'
+                f"    {{UI_RECTANGLE, {obj['x']}, {obj['y']}, "
+                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},  // Rectangle\n"
             )
 
         elif obj["type"] == "OVAL":
             c_code += (
-                f'    {{UI_OVAL, {obj["x"]}, {obj["y"]}, '
-                f'{obj["width"]}, {obj["height"]}, '
-                f'{fill}, {outline}, 0, ""}},\n'
+                f"    {{UI_OVAL, {obj['x']}, {obj['y']}, "
+                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},  // Oval\n"
             )
 
         elif obj["type"] == "TEXT":
             c_code += (
-                f'    {{UI_TEXT, {obj["x"]}, {obj["y"]}, '
-                f'0, 0, {fill}, 0x0000, {font_size}, '
-                f'"{obj["text"]}"}},\n'
+                f"    {{UI_TEXT, {obj['x']}, {obj['y']}, "
+                f"0, 0, {fill}, 0x0000, {font_size}, \"{text_val}\"}},  // Text\n"
             )
 
     c_code += "};\n"
 
-    # Show in popup
+    # ----- Show in Popup -----
     code_window = tk.Toplevel()
     code_window.title("Generated C Code")
 
@@ -599,20 +737,185 @@ def update_properties_visibility(item_type):
         outline_entry.pack_forget()
         apply_btn.pack_forget()
 
+def rgb888_to_rgb565(hex_color):
+    """Convert #RRGGBB or 0xRRGGBB to RGB565 hex code safely"""
+    if not hex_color:
+        return "0xFFFF"  # default to white
 
-# ---- Main Start Window ----
+    if isinstance(hex_color, str):
+        hex_color = hex_color.strip()
+        if hex_color.startswith("#"):
+            hex_color = hex_color[1:]
+        elif hex_color.startswith("0x"):
+            hex_color = hex_color[2:]
+
+    # Ensure we have exactly 6 hex digits
+    if len(hex_color) != 6:
+        return "0xFFFF"  # fallback to white
+
+    try:
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+    except ValueError:
+        return "0xFFFF"  # fallback to white if invalid
+
+    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+    return f"0x{rgb565:04X}"
+
+
+def save_project():
+    if not current_project_path or not current_project_name:
+        messagebox.showerror("Error", "No project open!")
+        return
+
+    project_data = {
+        "project_name": current_project_name,
+        "ui_width": canvas.winfo_width() - 2 * PADDING,
+        "ui_height": canvas.winfo_height() - 2 * PADDING,
+        "ui_objects": ui_objects
+    }
+
+    file_path = os.path.join(current_project_path, "project.json")
+    with open(file_path, "w") as f:
+        json.dump(project_data, f, indent=4)
+
+    messagebox.showinfo("Saved", f"Project saved at {file_path}")
+
+def open_existing_project():
+    global ui_objects, current_project_name, current_project_path
+
+    # Ask user to select the saved project file
+    project_file = filedialog.askopenfilename(
+        title="Select Project File",
+        filetypes=[("UI Project JSON", "*.json")]
+    )
+    if not project_file:
+        return
+
+    try:
+        with open(project_file, "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load project:\n{e}")
+        return
+
+    # Save project info globally
+    current_project_name = data.get("project_name")
+    current_project_path = project_file.rsplit("/", 1)[0]
+
+    ui_objects = data.get("ui_objects", [])
+    ui_width = data.get("ui_width", 400)
+    ui_height = data.get("ui_height", 300)
+
+    # ⚡ Create the canvas with the loaded dimensions
+    loaded_canvas = create_canvas(ui_width, ui_height)
+
+    # ⚡ Recreate all UI objects on this canvas
+    for obj in ui_objects:
+        obj_type = obj["type"]
+        if obj_type == "RECTANGLE":
+            obj["id"] = loaded_canvas.create_rectangle(
+                obj["x"], obj["y"],
+                obj["x"] + obj["width"], obj["y"] + obj["height"],
+                fill=obj.get("fill", "skyblue"),
+                outline=obj.get("outline", "black"),
+                tags=("draggable", "objects")
+            )
+        elif obj_type == "OVAL":
+            obj["id"] = loaded_canvas.create_oval(
+                obj["x"], obj["y"],
+                obj["x"] + obj["width"], obj["y"] + obj["height"],
+                fill=obj.get("fill", "lightgreen"),
+                outline=obj.get("outline", "black"),
+                tags=("draggable", "objects")
+            )
+        elif obj_type == "TEXT":
+            obj["id"] = loaded_canvas.create_text(
+                obj["x"], obj["y"],
+                text=obj.get("text", "Sample Text"),
+                font=("Arial", obj.get("font_size", 12)),
+                fill=obj.get("fill", "black"),
+                tags=("draggable", "objects")
+            )
+
+    messagebox.showinfo("Project Loaded", f"Project '{current_project_name}' loaded successfully!")
+
+def save_project():
+    global ui_objects, current_project_name, current_project_path
+
+    if not ui_objects:
+        messagebox.showwarning("Nothing to Save", "There are no UI elements to save!")
+        return
+
+    # Ask where to save
+    if current_project_path:
+        save_path = filedialog.asksaveasfilename(
+            title="Save Project",
+            initialfile=f"{current_project_name}.json",
+            defaultextension=".json",
+            filetypes=[("UI Project JSON", "*.json")]
+        )
+    else:
+        save_path = filedialog.asksaveasfilename(
+            title="Save Project",
+            defaultextension=".json",
+            filetypes=[("UI Project JSON", "*.json")]
+        )
+
+    if not save_path:
+        return
+
+    # Collect data
+    project_data = {
+        "project_name": current_project_name or "Unnamed",
+        "ui_width": canvas_width_global,
+        "ui_height": canvas_height_global,
+        "ui_objects": []
+    }
+
+    for obj in ui_objects:
+        # Remove canvas id before saving
+        obj_copy = obj.copy()
+        if "id" in obj_copy:
+            del obj_copy["id"]
+        project_data["ui_objects"].append(obj_copy)
+
+    # Write JSON
+    try:
+        with open(save_path, "w") as f:
+            json.dump(project_data, f, indent=4)
+        messagebox.showinfo("Saved", f"Project saved successfully at:\n{save_path}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save project:\n{e}")
+
+
+# # ---- Main Start Window ----
+# root = tk.Tk()
+# root.title("Canvas Setup")
+# root.geometry("300x200")
+
+# tk.Label(root, text="Enter UI Width:").pack(pady=5)
+# width_entry = tk.Entry(root)
+# width_entry.pack()
+
+# tk.Label(root, text="Enter UI Height:").pack(pady=5)
+# height_entry = tk.Entry(root)
+# height_entry.pack()
+
+# tk.Button(root, text="Create UI Builder", command=create_canvas).pack(pady=15)
+
+# root.mainloop()
+
+# ================================
+# Main Start Window
+# ================================
 root = tk.Tk()
-root.title("Canvas Setup")
-root.geometry("300x200")
+root.title("Start New UI Project")
+root.geometry("300x180")
 
-tk.Label(root, text="Enter UI Width:").pack(pady=5)
-width_entry = tk.Entry(root)
-width_entry.pack()
-
-tk.Label(root, text="Enter UI Height:").pack(pady=5)
-height_entry = tk.Entry(root)
-height_entry.pack()
-
-tk.Button(root, text="Create UI Builder", command=create_canvas).pack(pady=15)
+tk.Label(root, text="Start a new UI Project").pack(pady=10)
+tk.Button(root, text="Create New Project", command=launch_builder_flow).pack(pady=5)
+tk.Button(root, text="Open Existing Project", command=open_existing_project).pack(pady=5)
 
 root.mainloop()
