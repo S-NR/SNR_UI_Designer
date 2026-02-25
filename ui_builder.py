@@ -1,7 +1,7 @@
 import json
 import os
 import tkinter as tk
-from tkinter import messagebox, simpledialog, filedialog
+from tkinter import messagebox, filedialog, messagebox
 
 PADDING = 100
 current_tool = None
@@ -43,25 +43,6 @@ current_project_path = None
 canvas_width_global = 400
 canvas_height_global = 300
 
-def start_new_project():
-    global current_project_name, current_project_path
-
-    # 1️⃣ Ask Project Name
-    project_name = simpledialog.askstring("Project Name", "Enter your project name:")
-    if not project_name:
-        messagebox.showwarning("Cancelled", "Project creation cancelled!")
-        return False
-    current_project_name = project_name
-
-    # 2️⃣ Ask Project Path
-    project_path = filedialog.askdirectory(title="Select folder to save your project")
-    if not project_path:
-        messagebox.showwarning("Cancelled", "Project creation cancelled!")
-        return False
-    current_project_path = project_path
-
-    return True
-
 def create_ui_dimensions_window():
     """
     Ask user for UI dimensions after project is chosen.
@@ -90,16 +71,6 @@ def create_ui_dimensions_window():
     height_entry.pack()
 
     tk.Button(dimension_window, text="Submit", command=submit_dimensions).pack(pady=10)
-
-def launch_builder_flow():
-    global root
-
-    root.destroy()  # Close start window
-    """
-    Startup sequence: Project Name -> Path -> Dimensions -> Canvas
-    """
-    if start_new_project():
-        create_ui_dimensions_window()
 
 def color_to_rgb565(color_str):
     """
@@ -165,6 +136,11 @@ def create_canvas(ui_width, ui_height):
 
         # New window
         builder = tk.Toplevel(root)
+        def close_builder():
+            builder.destroy()
+            root.destroy()   # This fully exits app
+
+        builder.protocol("WM_DELETE_WINDOW", close_builder)
         builder.title("Simple UI Builder")
 
         # ---- Left Toolbox ----
@@ -935,33 +911,170 @@ def save_project():
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save project:\n{e}")
 
+    name = project_name_entry.get().strip()
+    path = project_path_entry.get().strip()
 
-# # ---- Main Start Window ----
-# root = tk.Tk()
-# root.title("Canvas Setup")
-# root.geometry("300x200")
+    if not name:
+        messagebox.showerror("Error", "Please enter project name")
+        return
 
-# tk.Label(root, text="Enter UI Width:").pack(pady=5)
-# width_entry = tk.Entry(root)
-# width_entry.pack()
+    if not path:
+        messagebox.showerror("Error", "Please select project path")
+        return
 
-# tk.Label(root, text="Enter UI Height:").pack(pady=5)
-# height_entry = tk.Entry(root)
-# height_entry.pack()
+    current_project_name = name
+    current_project_path = path
 
-# tk.Button(root, text="Create UI Builder", command=create_canvas).pack(pady=15)
+    # Hide project section
+    project_frame.pack_forget()
 
-# root.mainloop()
+    # Show dimension section
+    dimension_frame.pack(pady=10, fill="x", padx=50)
 
 # ================================
 # Main Start Window
 # ================================
+# root = tk.Tk()
+# root.title("Start New UI Project")
+# root.geometry("500x400")
+
+# tk.Label(root, text="Start a new UI Project").pack(pady=10)
+# tk.Button(root, text="Create New Project", command=launch_builder_flow).pack(pady=5)
+# tk.Button(root, text="Open Existing Project", command=open_existing_project).pack(pady=5)
+
+# root.mainloop()
+
+# ======================
+# Logic Functions
+# ======================
+
+def show_create_section():
+    dimension_frame.pack_forget()
+    project_frame.pack(pady=10, fill="x", padx=50)
+
+
+def validate_project_details():
+    global current_project_name, current_project_path
+
+    name = project_name_entry.get().strip()
+    path = project_path_entry.get().strip()
+
+    if not name:
+        messagebox.showerror("Error", "Please enter project name")
+        return
+
+    if not path:
+        messagebox.showerror("Error", "Please select project path")
+        return
+
+    current_project_name = name
+    current_project_path = path
+
+    project_frame.pack_forget()
+    dimension_frame.pack(pady=10, fill="x", padx=50)
+
+
+def create_project_from_ui():
+    try:
+        width = int(width_entry.get())
+        height = int(height_entry.get())
+
+        if width <= 0 or height <= 0:
+            raise ValueError
+
+        root.withdraw()  # Hide start screen
+        create_canvas(width, height)
+
+    except ValueError:
+        messagebox.showerror("Error", "Enter valid width and height")
+
+
+# ================================
+# Main Start Window (Enhanced UX)
+# ================================
 root = tk.Tk()
 root.title("Start New UI Project")
-root.geometry("500x400")
+root.geometry("600x450")
 
-tk.Label(root, text="Start a new UI Project").pack(pady=10)
-tk.Button(root, text="Create New Project", command=launch_builder_flow).pack(pady=5)
-tk.Button(root, text="Open Existing Project", command=open_existing_project).pack(pady=5)
+# ----- Title -----
+tk.Label(root, text="Start a new UI Project",
+         font=("Arial", 14, "bold")).pack(pady=10)
+
+# ----- Top Buttons -----
+top_frame = tk.Frame(root)
+top_frame.pack(pady=10)
+
+tk.Button(top_frame, text="Create New Project",
+          command=lambda: show_create_section()).pack(side="left", padx=10)
+
+tk.Button(top_frame, text="Open Existing Project",
+          command=open_existing_project).pack(side="left", padx=10)
+
+
+# ======================
+# 🔴 PROJECT SECTION
+# ======================
+# ======================
+# 🔴 PROJECT SECTION
+# ======================
+project_frame = tk.Frame(root, bd=2, relief="groove", padx=15, pady=15)
+project_frame.pack(pady=10, fill="x", padx=50)
+
+# Configure grid columns
+project_frame.columnconfigure(0, weight=0)   # labels
+project_frame.columnconfigure(1, weight=1)   # entry expands
+project_frame.columnconfigure(2, weight=0)   # buttons
+
+# ---- Project Name ----
+tk.Label(project_frame, text="Project Name:").grid(row=0, column=0, sticky="w", pady=5)
+
+project_name_entry = tk.Entry(project_frame)
+project_name_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=5)
+
+
+# ---- Project Path ----
+tk.Label(project_frame, text="Project Path:").grid(row=1, column=0, sticky="w", pady=5)
+
+project_path_entry = tk.Entry(project_frame)
+project_path_entry.grid(row=1, column=1, sticky="ew", pady=5)
+
+
+def browse_path():
+    path = filedialog.askdirectory()
+    if path:
+        project_path_entry.delete(0, tk.END)
+        project_path_entry.insert(0, path)
+
+# 🔴 Browse button (Right side)
+tk.Button(project_frame, text="Browse", command=browse_path)\
+    .grid(row=1, column=2, padx=10, pady=5)
+
+
+# 🔵 Next button (Bottom Right)
+tk.Button(project_frame, text="Next →",
+          command=validate_project_details)\
+    .grid(row=3, column=2, sticky="e", pady=15)
+
+
+# ======================
+# 🔵 DIMENSION SECTION
+# ======================
+dimension_frame = tk.Frame(root, bd=2, relief="groove", padx=10, pady=10)
+
+tk.Label(dimension_frame, text="UI Width:").pack(anchor="w")
+width_entry = tk.Entry(dimension_frame)
+width_entry.pack(pady=5)
+
+tk.Label(dimension_frame, text="UI Height:").pack(anchor="w")
+height_entry = tk.Entry(dimension_frame)
+height_entry.pack(pady=5)
+
+tk.Button(dimension_frame, text="Create Project",
+          command=lambda: create_project_from_ui()).pack(pady=10)
+
+
+# Hide both initially
+project_frame.pack_forget()
+dimension_frame.pack_forget()
 
 root.mainloop()

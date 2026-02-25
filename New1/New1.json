@@ -1,23 +1,12 @@
 {
-    "project_name": "New1",
-    "ui_width": 400,
-    "ui_height": 300,
+    "project_name": "new1",
+    "ui_width": 300,
+    "ui_height": 200,
     "ui_objects": [
         {
-            "type": "TEXT",
-            "x": 480,
-            "y": 257,
-            "width": 0,
-            "height": 0,
-            "text": "Sample Text",
-            "font_size": 12,
-            "fill": "black",
-            "outline": ""
-        },
-        {
             "type": "RECTANGLE",
-            "x": 373,
-            "y": 372,
+            "x": 204,
+            "y": 166,
             "width": 100,
             "height": 50,
             "text": "",
