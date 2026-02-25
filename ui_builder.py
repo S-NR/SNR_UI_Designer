@@ -22,6 +22,7 @@ font_label = None
 fill_label = None
 outline_label = None
 apply_btn = None
+builder_canvas = None
 
 # ---- Updated COLOR MAP ----
 COLOR_MAP = {
@@ -91,6 +92,9 @@ def create_ui_dimensions_window():
     tk.Button(dimension_window, text="Submit", command=submit_dimensions).pack(pady=10)
 
 def launch_builder_flow():
+    global root
+
+    root.destroy()  # Close start window
     """
     Startup sequence: Project Name -> Path -> Dimensions -> Canvas
     """
@@ -146,10 +150,12 @@ def create_canvas(ui_width, ui_height):
     global text_label, font_label
     global fill_label, outline_label
     global apply_btn
+    global builder_canvas
         
     global canvas_width_global, canvas_height_global
     canvas_width_global = ui_width
     canvas_height_global = ui_height
+
     try:
         # ui_width = int(width_entry.get())
         # ui_height = int(height_entry.get())
@@ -249,6 +255,8 @@ def create_canvas(ui_width, ui_height):
             width=2,
             tags="ui_area"
         )
+        
+        builder_canvas = canvas
 
         # =========================
         # Bottom Frame (Inside Builder Window)
@@ -328,14 +336,42 @@ def apply_properties(canvas, text_entry, font_size_entry, fill_entry, outline_en
                 obj["font_size"] = int(new_font_size)
 
             # ----- FILL COLOR -----
-            new_fill = fill_entry.get()
+            # new_fill = fill_entry.get()
+            # if new_fill:
+            #     canvas.itemconfig(selected_item, fill=new_fill)
+            #     obj["fill"] = new_fill
+            new_fill = fill_entry.get().strip()
             if new_fill:
+                if new_fill.lower() in COLOR_MAP:
+                    new_fill = COLOR_MAP[new_fill.lower()]
+
+                if not new_fill.startswith("#"):
+                    if new_fill.startswith("0x"):
+                        new_fill = "#" + new_fill[2:]
+                    else:
+                        new_fill = "#" + new_fill
+
                 canvas.itemconfig(selected_item, fill=new_fill)
                 obj["fill"] = new_fill
 
             # ----- OUTLINE COLOR -----
-            new_outline = outline_entry.get()
+            # new_outline = outline_entry.get()
+            # if new_outline:
+            #     canvas.itemconfig(selected_item, outline=new_outline)
+            #     obj["outline"] = new_outline
+
+            # ----- OUTLINE COLOR -----
+            new_outline = outline_entry.get().strip()
             if new_outline:
+                if new_outline.lower() in COLOR_MAP:
+                    new_outline = COLOR_MAP[new_outline.lower()]
+
+                if not new_outline.startswith("#"):
+                    if new_outline.startswith("0x"):
+                        new_outline = "#" + new_outline[2:]
+                    else:
+                        new_outline = "#" + new_outline
+
                 canvas.itemconfig(selected_item, outline=new_outline)
                 obj["outline"] = new_outline
 
@@ -544,7 +580,10 @@ def handle_click(event, canvas):
                 "y": event.y,
                 "width": 100,
                 "height": 60,
-                "text": ""
+                "text": "",
+                "font_size": 0,
+                "fill": "lightgreen",
+                "outline": "black"
             })
 
         # TEXT
@@ -764,23 +803,23 @@ def rgb888_to_rgb565(hex_color):
     return f"0x{rgb565:04X}"
 
 
-def save_project():
-    if not current_project_path or not current_project_name:
-        messagebox.showerror("Error", "No project open!")
-        return
+# def save_project():
+#     if not current_project_path or not current_project_name:
+#         messagebox.showerror("Error", "No project open!")
+#         return
 
-    project_data = {
-        "project_name": current_project_name,
-        "ui_width": canvas.winfo_width() - 2 * PADDING,
-        "ui_height": canvas.winfo_height() - 2 * PADDING,
-        "ui_objects": ui_objects
-    }
+#     project_data = {
+#         "project_name": current_project_name,
+#         "ui_width": canvas.winfo_width() - 2 * PADDING,
+#         "ui_height": canvas.winfo_height() - 2 * PADDING,
+#         "ui_objects": ui_objects
+#     }
 
-    file_path = os.path.join(current_project_path, "project.json")
-    with open(file_path, "w") as f:
-        json.dump(project_data, f, indent=4)
+#     file_path = os.path.join(current_project_path, "project.json")
+#     with open(file_path, "w") as f:
+#         json.dump(project_data, f, indent=4)
 
-    messagebox.showinfo("Saved", f"Project saved at {file_path}")
+#     messagebox.showinfo("Saved", f"Project saved at {file_path}")
 
 def open_existing_project():
     global ui_objects, current_project_name, current_project_path
@@ -802,8 +841,10 @@ def open_existing_project():
 
     # Save project info globally
     current_project_name = data.get("project_name")
-    current_project_path = project_file.rsplit("/", 1)[0]
+    # current_project_path = project_file.rsplit("/", 1)[0]
+    current_project_path = os.path.dirname(project_file)
 
+    ui_objects.clear()
     ui_objects = data.get("ui_objects", [])
     ui_width = data.get("ui_width", 400)
     ui_height = data.get("ui_height", 300)
@@ -842,31 +883,26 @@ def open_existing_project():
     messagebox.showinfo("Project Loaded", f"Project '{current_project_name}' loaded successfully!")
 
 def save_project():
-    global ui_objects, current_project_name, current_project_path
+    global ui_objects, current_project_name, current_project_path, builder_canvas
 
     if not ui_objects:
         messagebox.showwarning("Nothing to Save", "There are no UI elements to save!")
         return
 
-    # Ask where to save
-    if current_project_path:
-        save_path = filedialog.asksaveasfilename(
-            title="Save Project",
-            initialfile=f"{current_project_name}.json",
-            defaultextension=".json",
-            filetypes=[("UI Project JSON", "*.json")]
-        )
-    else:
-        save_path = filedialog.asksaveasfilename(
-            title="Save Project",
-            defaultextension=".json",
-            filetypes=[("UI Project JSON", "*.json")]
-        )
+    if not builder_canvas:
+        messagebox.showerror("Error", "No active canvas found!")
+        return
+
+    save_path = filedialog.asksaveasfilename(
+        title="Save Project",
+        initialfile=f"{current_project_name}.json" if current_project_name else "project.json",
+        defaultextension=".json",
+        filetypes=[("UI Project JSON", "*.json")]
+    )
 
     if not save_path:
         return
 
-    # Collect data
     project_data = {
         "project_name": current_project_name or "Unnamed",
         "ui_width": canvas_width_global,
@@ -874,18 +910,28 @@ def save_project():
         "ui_objects": []
     }
 
-    for obj in ui_objects:
-        # Remove canvas id before saving
-        obj_copy = obj.copy()
-        if "id" in obj_copy:
-            del obj_copy["id"]
-        project_data["ui_objects"].append(obj_copy)
+    # 🔥 Save in REAL canvas stacking order
+    canvas_items = builder_canvas.find_all()
 
-    # Write JSON
+    for canvas_id in canvas_items:
+        tags = builder_canvas.gettags(canvas_id)
+
+        # Only save real UI objects
+        if "objects" not in tags:
+            continue
+
+        for obj in ui_objects:
+            if obj.get("id") == canvas_id:
+                obj_copy = obj.copy()
+                obj_copy.pop("id", None)
+                project_data["ui_objects"].append(obj_copy)
+
     try:
         with open(save_path, "w") as f:
             json.dump(project_data, f, indent=4)
+
         messagebox.showinfo("Saved", f"Project saved successfully at:\n{save_path}")
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save project:\n{e}")
 
@@ -912,7 +958,7 @@ def save_project():
 # ================================
 root = tk.Tk()
 root.title("Start New UI Project")
-root.geometry("300x180")
+root.geometry("500x400")
 
 tk.Label(root, text="Start a new UI Project").pack(pady=10)
 tk.Button(root, text="Create New Project", command=launch_builder_flow).pack(pady=5)
