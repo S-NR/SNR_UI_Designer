@@ -798,65 +798,93 @@ def rgb888_to_rgb565(hex_color):
 #     messagebox.showinfo("Saved", f"Project saved at {file_path}")
 
 def open_existing_project():
-    global ui_objects, current_project_name, current_project_path
+    global current_project_name, current_project_path, ui_objects
 
-    # Ask user to select the saved project file
-    project_file = filedialog.askopenfilename(
-        title="Select Project File",
-        filetypes=[("UI Project JSON", "*.json")]
+    file_path = filedialog.askopenfilename(
+        title="Open Project",
+        filetypes=[("UI Project Files", "*.json")]
     )
-    if not project_file:
+
+    if not file_path:
         return
 
     try:
-        with open(project_file, "r") as f:
-            data = json.load(f)
+        with open(file_path, "r") as f:
+            project_data = json.load(f)
+
+        # Restore metadata
+        current_project_name = project_data.get("project_name")
+        current_project_path = os.path.dirname(file_path)
+        ui_objects = project_data.get("ui_objects", [])
+
+        ui_width = project_data.get("ui_width", 400)
+        ui_height = project_data.get("ui_height", 300)
+
+        # Hide start screen
+        root.withdraw()
+
+        # ✅ PASS WIDTH & HEIGHT HERE
+        loaded_canvas = create_canvas(ui_width, ui_height)
+
+        # Recreate objects
+        for obj in ui_objects:
+            obj_type = obj["type"]
+
+            if obj_type == "RECTANGLE":
+                obj["id"] = loaded_canvas.create_rectangle(
+                    obj["x"], obj["y"],
+                    obj["x"] + obj["width"],
+                    obj["y"] + obj["height"],
+                    fill=obj.get("fill", "skyblue"),
+                    outline=obj.get("outline", "black"),
+                    tags=("draggable", "objects")
+                )
+
+            elif obj_type == "OVAL":
+                obj["id"] = loaded_canvas.create_oval(
+                    obj["x"], obj["y"],
+                    obj["x"] + obj["width"],
+                    obj["y"] + obj["height"],
+                    fill=obj.get("fill", "lightgreen"),
+                    outline=obj.get("outline", "black"),
+                    tags=("draggable", "objects")
+                )
+
+            elif obj_type == "TEXT":
+                obj["id"] = loaded_canvas.create_text(
+                    obj["x"], obj["y"],
+                    text=obj.get("text", "Sample Text"),
+                    font=("Arial", obj.get("font_size", 12)),
+                    fill=obj.get("fill", "black"),
+                    tags=("draggable", "objects")
+                )
+
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load project:\n{e}")
-        return
+        messagebox.showerror("Error", f"Failed to open project:\n{e}")
+        
+def load_objects_to_canvas():
+    global builder_canvas, ui_objects
 
-    # Save project info globally
-    current_project_name = data.get("project_name")
-    # current_project_path = project_file.rsplit("/", 1)[0]
-    current_project_path = os.path.dirname(project_file)
-
-    ui_objects.clear()
-    ui_objects = data.get("ui_objects", [])
-    ui_width = data.get("ui_width", 400)
-    ui_height = data.get("ui_height", 300)
-
-    # ⚡ Create the canvas with the loaded dimensions
-    loaded_canvas = create_canvas(ui_width, ui_height)
-
-    # ⚡ Recreate all UI objects on this canvas
     for obj in ui_objects:
         obj_type = obj["type"]
-        if obj_type == "RECTANGLE":
-            obj["id"] = loaded_canvas.create_rectangle(
-                obj["x"], obj["y"],
-                obj["x"] + obj["width"], obj["y"] + obj["height"],
-                fill=obj.get("fill", "skyblue"),
-                outline=obj.get("outline", "black"),
-                tags=("draggable", "objects")
-            )
-        elif obj_type == "OVAL":
-            obj["id"] = loaded_canvas.create_oval(
-                obj["x"], obj["y"],
-                obj["x"] + obj["width"], obj["y"] + obj["height"],
-                fill=obj.get("fill", "lightgreen"),
-                outline=obj.get("outline", "black"),
-                tags=("draggable", "objects")
-            )
-        elif obj_type == "TEXT":
-            obj["id"] = loaded_canvas.create_text(
-                obj["x"], obj["y"],
-                text=obj.get("text", "Sample Text"),
-                font=("Arial", obj.get("font_size", 12)),
-                fill=obj.get("fill", "black"),
-                tags=("draggable", "objects")
+        x = obj["x"]
+        y = obj["y"]
+
+        if obj_type == "text":
+            builder_canvas.create_text(
+                x, y,
+                text=obj["text"],
+                fill=obj["color"],
+                font=("Arial", obj["size"])
             )
 
-    messagebox.showinfo("Project Loaded", f"Project '{current_project_name}' loaded successfully!")
+        elif obj_type == "rectangle":
+            builder_canvas.create_rectangle(
+                x, y,
+                x + obj["width"],
+                y + obj["height"],
+                fill=obj["color"]
+            )
 
 def save_project():
     global ui_objects, current_project_name, current_project_path, builder_canvas
