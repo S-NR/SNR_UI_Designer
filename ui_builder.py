@@ -311,11 +311,7 @@ def apply_properties(canvas, text_entry, font_size_entry, fill_entry, outline_en
                                   font=("Arial", int(new_font_size)))
                 obj["font_size"] = int(new_font_size)
 
-            # ----- FILL COLOR -----
-            # new_fill = fill_entry.get()
-            # if new_fill:
-            #     canvas.itemconfig(selected_item, fill=new_fill)
-            #     obj["fill"] = new_fill
+            # ----- FILL COLOR ----
             new_fill = fill_entry.get().strip()
             if new_fill:
                 if new_fill.lower() in COLOR_MAP:
@@ -329,12 +325,6 @@ def apply_properties(canvas, text_entry, font_size_entry, fill_entry, outline_en
 
                 canvas.itemconfig(selected_item, fill=new_fill)
                 obj["fill"] = new_fill
-
-            # ----- OUTLINE COLOR -----
-            # new_outline = outline_entry.get()
-            # if new_outline:
-            #     canvas.itemconfig(selected_item, outline=new_outline)
-            #     obj["outline"] = new_outline
 
             # ----- OUTLINE COLOR -----
             new_outline = outline_entry.get().strip()
@@ -397,72 +387,292 @@ def place_item(event, canvas):
         # 🔥 RESET TOOL AFTER ONE USE
         current_tool = None
 
+# # def generate_c_code():
+#     global current_project_path, current_project_name
+
+#     if not current_project_path:
+#         messagebox.showerror("Error", "No project path found!")
+#         return
+
+#     if not ui_objects:
+#         messagebox.showwarning("Warning", "No UI objects to generate!")
+#         return
+
+#     # ===============================
+#     # Build C Code String
+#     # ===============================
+#     c_code = ""
+
+#     c_code += "#include <stdint.h>\n\n"
+
+#     c_code += "typedef enum {\n"
+#     c_code += "    UI_RECTANGLE,\n"
+#     c_code += "    UI_OVAL,\n"
+#     c_code += "    UI_TEXT\n"
+#     c_code += "} UI_ObjectType;\n\n"
+
+#     c_code += "typedef struct {\n"
+#     c_code += "    UI_ObjectType type;\n"
+#     c_code += "    int x;\n"
+#     c_code += "    int y;\n"
+#     c_code += "    int width;\n"
+#     c_code += "    int height;\n"
+#     c_code += "    uint16_t fill;\n"
+#     c_code += "    uint16_t outline;\n"
+#     c_code += "    int font_size;\n"
+#     c_code += "    char text[50];\n"
+#     c_code += "} UI_Object;\n\n"
+
+#     c_code += f"#define UI_OBJECT_COUNT {len(ui_objects)}\n\n"
+#     c_code += "UI_Object ui_objects[UI_OBJECT_COUNT] = {\n"
+
+#     for obj in ui_objects:
+
+#         fill = color_to_rgb565(obj.get("fill", "white"))
+#         outline = color_to_rgb565(obj.get("outline", "black"))
+#         font_size = obj.get("font_size", 12)
+#         text_val = obj.get("text", "")
+
+#         if obj["type"] == "RECTANGLE":
+#             c_code += (
+#                 f"    {{UI_RECTANGLE, {obj['x']}, {obj['y']}, "
+#                 f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},\n"
+#             )
+
+#         elif obj["type"] == "OVAL":
+#             c_code += (
+#                 f"    {{UI_OVAL, {obj['x']}, {obj['y']}, "
+#                 f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},\n"
+#             )
+
+#         elif obj["type"] == "TEXT":
+#             c_code += (
+#                 f"    {{UI_TEXT, {obj['x']}, {obj['y']}, "
+#                 f"0, 0, {fill}, 0x0000, {font_size}, \"{text_val}\"}},\n"
+#             )
+
+#     c_code += "};\n"
+
+#     # ===============================
+#     # Create Folder Structure
+#     # ===============================
+#     src_path = os.path.join(current_project_path, "Core", "Src")
+#     inc_path = os.path.join(current_project_path, "Core", "Inc")
+
+#     os.makedirs(src_path, exist_ok=True)
+#     os.makedirs(inc_path, exist_ok=True)
+
+#     # ===============================
+#     # Save File
+#     # ===============================
+#     file_path = os.path.join(src_path, "ui_layout.c")
+
+#     try:
+#         with open(file_path, "w") as f:
+#             f.write(c_code)
+
+#         messagebox.showinfo(
+#             "Success",
+#             f"C code generated successfully!\n\nSaved at:\n{file_path}"
+#         )
+
+#     except Exception as e:
+#         messagebox.showerror("Error", f"Failed to write file:\n{e}")
+#         return
+
+#     # ===============================
+#     # Optional: Show Preview Window
+#     # ===============================
+#     code_window = tk.Toplevel()
+#     code_window.title("Generated C Code")
+
+#     text_area = tk.Text(code_window, width=90, height=30)
+#     text_area.pack()
+#     text_area.insert("1.0", c_code)
+
 def generate_c_code():
-    c_code = ""
+    global current_project_path
 
-    # ----- Headers -----
-    c_code += "#include <stdint.h>\n\n"
+    if not current_project_path:
+        messagebox.showerror("Error", "No project path found!")
+        return
 
-    # ----- Enum -----
-    c_code += "typedef enum {\n"
-    c_code += "    UI_RECTANGLE,\n"
-    c_code += "    UI_OVAL,\n"
-    c_code += "    UI_TEXT\n"
-    c_code += "} UI_ObjectType;\n\n"
+    if not ui_objects:
+        messagebox.showwarning("Warning", "No UI objects to generate!")
+        return
 
-    # ----- Struct -----
-    c_code += "typedef struct {\n"
-    c_code += "    UI_ObjectType type;\n"
-    c_code += "    int x;\n"
-    c_code += "    int y;\n"
-    c_code += "    int width;\n"
-    c_code += "    int height;\n"
-    c_code += "    uint16_t fill;        // RGB565 fill color\n"
-    c_code += "    uint16_t outline;     // RGB565 outline color\n"
-    c_code += "    int font_size;        // used only for TEXT\n"
-    c_code += "    char text[50];\n"
-    c_code += "} UI_Object;\n\n"
+    # ============================================
+    # Create STM32 Folder Structure
+    # ============================================
+    inc_path = os.path.join(current_project_path, "Core", "Inc")
+    src_path = os.path.join(current_project_path, "Core", "Src")
 
-    # ----- UI Object Count -----
-    c_code += f"#define UI_OBJECT_COUNT {len(ui_objects)}\n\n"
+    os.makedirs(inc_path, exist_ok=True)
+    os.makedirs(src_path, exist_ok=True)
 
-    # ----- UI Objects Array -----
-    c_code += "UI_Object ui_objects[UI_OBJECT_COUNT] = {\n"
+    # ============================================
+    # Build Object Array Entries
+    # ============================================
+    object_entries = ""
 
     for obj in ui_objects:
-        # Convert fill and outline to RGB565
+
         fill = color_to_rgb565(obj.get("fill", "white"))
         outline = color_to_rgb565(obj.get("outline", "black"))
         font_size = obj.get("font_size", 12)
         text_val = obj.get("text", "")
 
         if obj["type"] == "RECTANGLE":
-            c_code += (
+            object_entries += (
                 f"    {{UI_RECTANGLE, {obj['x']}, {obj['y']}, "
-                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},  // Rectangle\n"
+                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},\n"
             )
 
         elif obj["type"] == "OVAL":
-            c_code += (
+            object_entries += (
                 f"    {{UI_OVAL, {obj['x']}, {obj['y']}, "
-                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},  // Oval\n"
+                f"{obj['width']}, {obj['height']}, {fill}, {outline}, 0, \"\"}},\n"
             )
 
         elif obj["type"] == "TEXT":
-            c_code += (
+            object_entries += (
                 f"    {{UI_TEXT, {obj['x']}, {obj['y']}, "
-                f"0, 0, {fill}, 0x0000, {font_size}, \"{text_val}\"}},  // Text\n"
+                f"0, 0, {fill}, 0x0000, {font_size}, \"{text_val}\"}},\n"
             )
 
-    c_code += "};\n"
+    # ============================================
+    # generated_ui.h
+    # ============================================
+    generated_ui_h = f"""#ifndef GENERATED_UI_H
+#define GENERATED_UI_H
 
-    # ----- Show in Popup -----
-    code_window = tk.Toplevel()
-    code_window.title("Generated C Code")
+#include <stdint.h>
 
-    text_area = tk.Text(code_window, width=80, height=30)
-    text_area.pack()
-    text_area.insert("1.0", c_code)
+typedef enum {{
+    UI_RECTANGLE,
+    UI_OVAL,
+    UI_TEXT
+}} UI_ObjectType;
+
+typedef struct {{
+    UI_ObjectType type;
+    int x;
+    int y;
+    int width;
+    int height;
+    uint16_t fill;
+    uint16_t outline;
+    int font_size;
+    char text[50];
+}} UI_Object;
+
+#define UI_OBJECT_COUNT {len(ui_objects)}
+
+extern UI_Object ui_objects[UI_OBJECT_COUNT];
+
+#endif
+"""
+
+    # ============================================
+    # generated_ui.c
+    # ============================================
+    generated_ui_c = f"""#include "generated_ui.h"
+
+UI_Object ui_objects[UI_OBJECT_COUNT] = {{
+{object_entries}}};
+"""
+
+    # ============================================
+    # ui_renderer.h
+    # ============================================
+    ui_renderer_h = """#ifndef UI_RENDERER_H
+#define UI_RENDERER_H
+
+#include "generated_ui.h"
+
+void UI_Render(void);
+
+/* These must be implemented in your display driver */
+void LCD_DrawRect(int x, int y, int w, int h, uint16_t color);
+void LCD_DrawOval(int x, int y, int w, int h, uint16_t color);
+void LCD_DrawText(int x, int y, char *text, uint16_t color);
+
+#endif
+"""
+
+    # ============================================
+    # ui_renderer.c
+    # ============================================
+    ui_renderer_c = """#include "ui_renderer.h"
+
+void UI_Render(void)
+{
+    for(int i = 0; i < UI_OBJECT_COUNT; i++)
+    {
+        switch(ui_objects[i].type)
+        {
+            case UI_RECTANGLE:
+                LCD_DrawRect(
+                    ui_objects[i].x,
+                    ui_objects[i].y,
+                    ui_objects[i].width,
+                    ui_objects[i].height,
+                    ui_objects[i].fill
+                );
+                break;
+
+            case UI_OVAL:
+                LCD_DrawOval(
+                    ui_objects[i].x,
+                    ui_objects[i].y,
+                    ui_objects[i].width,
+                    ui_objects[i].height,
+                    ui_objects[i].fill
+                );
+                break;
+
+            case UI_TEXT:
+                LCD_DrawText(
+                    ui_objects[i].x,
+                    ui_objects[i].y,
+                    ui_objects[i].text,
+                    ui_objects[i].fill
+                );
+                break;
+        }
+    }
+}
+"""
+
+    # ============================================
+    # Save All Files
+    # ============================================
+    try:
+        with open(os.path.join(inc_path, "generated_ui.h"), "w") as f:
+            f.write(generated_ui_h)
+
+        with open(os.path.join(src_path, "generated_ui.c"), "w") as f:
+            f.write(generated_ui_c)
+
+        with open(os.path.join(inc_path, "ui_renderer.h"), "w") as f:
+            f.write(ui_renderer_h)
+
+        with open(os.path.join(src_path, "ui_renderer.c"), "w") as f:
+            f.write(ui_renderer_c)
+
+        messagebox.showinfo(
+            "Success",
+            "STM32 UI driver files generated successfully!\n\n"
+            "Core/Inc:\n"
+            "  generated_ui.h\n"
+            "  ui_renderer.h\n\n"
+            "Core/Src:\n"
+            "  generated_ui.c\n"
+            "  ui_renderer.c"
+        )
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to generate files:\n{e}")
 
 def show_preview(event, canvas):
     global preview_item
@@ -778,25 +988,6 @@ def rgb888_to_rgb565(hex_color):
     rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
     return f"0x{rgb565:04X}"
 
-
-# def save_project():
-#     if not current_project_path or not current_project_name:
-#         messagebox.showerror("Error", "No project open!")
-#         return
-
-#     project_data = {
-#         "project_name": current_project_name,
-#         "ui_width": canvas.winfo_width() - 2 * PADDING,
-#         "ui_height": canvas.winfo_height() - 2 * PADDING,
-#         "ui_objects": ui_objects
-#     }
-
-#     file_path = os.path.join(current_project_path, "project.json")
-#     with open(file_path, "w") as f:
-#         json.dump(project_data, f, indent=4)
-
-#     messagebox.showinfo("Saved", f"Project saved at {file_path}")
-
 def open_existing_project():
     global current_project_name, current_project_path, ui_objects
 
@@ -861,7 +1052,7 @@ def open_existing_project():
 
     except Exception as e:
         messagebox.showerror("Error", f"Failed to open project:\n{e}")
-        
+
 def load_objects_to_canvas():
     global builder_canvas, ui_objects
 
@@ -959,19 +1150,6 @@ def save_project():
     # Show dimension section
     dimension_frame.pack(pady=10, fill="x", padx=50)
 
-# ================================
-# Main Start Window
-# ================================
-# root = tk.Tk()
-# root.title("Start New UI Project")
-# root.geometry("500x400")
-
-# tk.Label(root, text="Start a new UI Project").pack(pady=10)
-# tk.Button(root, text="Create New Project", command=launch_builder_flow).pack(pady=5)
-# tk.Button(root, text="Open Existing Project", command=open_existing_project).pack(pady=5)
-
-# root.mainloop()
-
 # ======================
 # Logic Functions
 # ======================
@@ -1038,10 +1216,6 @@ tk.Button(top_frame, text="Create New Project",
 tk.Button(top_frame, text="Open Existing Project",
           command=open_existing_project).pack(side="left", padx=10)
 
-
-# ======================
-# 🔴 PROJECT SECTION
-# ======================
 # ======================
 # 🔴 PROJECT SECTION
 # ======================
