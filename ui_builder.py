@@ -40,8 +40,8 @@ COLOR_MAP = {
 
 current_project_name = None
 current_project_path = None
-canvas_width_global = 400
-canvas_height_global = 300
+canvas_width_global = 480
+canvas_height_global = 272
 
 def create_ui_dimensions_window():
     """
@@ -64,10 +64,12 @@ def create_ui_dimensions_window():
 
     tk.Label(dimension_window, text="Enter UI Width:").pack(pady=5)
     width_entry = tk.Entry(dimension_window)
+    width_entry.insert(0, "480")
     width_entry.pack()
 
     tk.Label(dimension_window, text="Enter UI Height:").pack(pady=5)
     height_entry = tk.Entry(dimension_window)
+    height_entry.insert(0, "272")
     height_entry.pack()
 
     tk.Button(dimension_window, text="Submit", command=submit_dimensions).pack(pady=10)
@@ -505,8 +507,8 @@ def generate_c_code():
         messagebox.showwarning("Warning", "No UI objects to generate!")
         return
 
-    inc_path = os.path.join(current_project_path, "Core", "Inc")
-    src_path = os.path.join(current_project_path, "Core", "Src")
+    inc_path = os.path.join(current_project_path, "Display", "Inc")
+    src_path = os.path.join(current_project_path, "Display", "Src")
 
     os.makedirs(inc_path, exist_ok=True)
     os.makedirs(src_path, exist_ok=True)
@@ -600,12 +602,9 @@ UI_Object ui_objects[UI_OBJECT_COUNT] = {{
 
 /* LTDC Configuration */
 #if UI_RENDER_BACKEND == UI_RENDER_BACKEND_LTDC
-#define LCD_WIDTH   800
-#define LCD_HEIGHT  480
+#define LCD_WIDTH   480
+#define LCD_HEIGHT  272
 #define LCD_BYTES_PER_PIXEL 2  /* RGB565 format */
-
-/* Enable DMA2D hardware acceleration (optional) */
-#define STM32H7_DMA2D_ENABLE
 #endif
 
 /* Main Rendering Functions */
@@ -623,16 +622,13 @@ uint32_t UI_GetFPS(void);
     # ============================================
     ui_renderer_c = """#include "ui_renderer.h"
 #include "ui_stm_integration.h"
-
-#ifdef STM32H7xx
 #include "stm32h7xx_hal.h"
 #include "ltdc.h"
 #include "dma2d.h"
-#endif
 
-/* Framebuffer in SDRAM (STM32H7 configuration) */
-__attribute__((section(".sdram")))
-uint16_t framebuffer[LCD_WIDTH * LCD_HEIGHT];
+/* Framebuffer pointer to LTDC-configured address (0x24000000) */
+#define FRAMEBUFFER_ADDR ((uint16_t *)0x24000000)
+static uint16_t *framebuffer = FRAMEBUFFER_ADDR;
 
 static uint32_t g_FrameCounter = 0;
 static uint32_t g_LastFrameTime = 0;
@@ -814,19 +810,25 @@ uint32_t UI_GetFPS(void)
     FRAMEBUFFER CONFIGURATION FOR STM32H7
     =================================================================== */
 
-/* Define LTDC/LCD dimensions (typically 800x480 for STM32H7 eval boards) */
-#define LTDC_WIDTH          800
-#define LTDC_HEIGHT         480
+/* Define LTDC/LCD dimensions (reduced to fit in 320KB internal RAM) */
+#define LTDC_WIDTH          480
+#define LTDC_HEIGHT         272
 
 /* RGB565 format: 2 bytes per pixel */
 #define LTDC_BYTES_PER_PIXEL 2
 #define LTDC_BUFFER_SIZE     (LTDC_WIDTH * LTDC_HEIGHT * LTDC_BYTES_PER_PIXEL)
 
-/* Framebuffer locations in SDRAM */
-/* FMC SDRAM starts at 0xC0000000 for STM32H7 */
-#define SDRAM_BASE_ADDR      0xC0000000
-#define FRAMEBUFFER_LAYER0   ((uint16_t *)(SDRAM_BASE_ADDR + 0x00000000))  /* Layer 0 */
-#define FRAMEBUFFER_LAYER1   ((uint16_t *)(SDRAM_BASE_ADDR + 0x00180000))  /* Layer 1 (offset) */
+/* Enable DMA2D hardware acceleration for fast rectangle fills */
+#define STM32H7_DMA2D_ENABLE
+
+/* Framebuffer locations - using internal AXI SRAM (D1 domain) */
+/* 480x272x2 = 261KB fits within 320KB available in AXI SRAM */
+#define INTERNAL_RAM_BASE    0x24000000  /* AXI SRAM D1 domain */
+#define FRAMEBUFFER_LAYER0   ((uint16_t *)(INTERNAL_RAM_BASE))  /* Layer 0 */
+#define FRAMEBUFFER_LAYER1   ((uint16_t *)(INTERNAL_RAM_BASE + 0x00040000))  /* Layer 1 (if using double buffering) */
+
+/* Current configuration: 480x272x2 = 261KB fits in 320KB internal RAM */
+/* For higher resolution (800x480 = 768KB), use external memory via OCTOSPI */
 
 /* ===================================================================
     DMA2D HARDWARE ACCELERATION
@@ -959,19 +961,16 @@ uint32_t UI_GetTicks(void);
 
 #include "ui_stm_integration.h"
 #include "generated_ui.h"
-
-#ifdef STM32H7xx
 #include "stm32h7xx_hal.h"
 #include "ltdc.h"
 #include "dma2d.h"
-#endif
 
 /* ===================================================================
    FRAMEBUFFER STATE
    =================================================================== */
 
 static uint16_t *g_pFramebuffer = FRAMEBUFFER_LAYER0;
-static uint16_t *g_pBackbuffer = FRAMEBUFFER_LAYER1;
+/* Note: Double buffering disabled due to memory constraints */
 
 /* ===================================================================
    FRAMEBUFFER OPERATIONS
@@ -979,13 +978,12 @@ static uint16_t *g_pBackbuffer = FRAMEBUFFER_LAYER1;
 
 void UI_FramebufferInit(void)
 {
-    /* Framebuffers already configured by STM32CubeMX during MX_LTDC_Init() */
-    /* This function is called for any additional initialization */
+    /* Framebuffers configured by STM32CubeMX during MX_LTDC_Init() */
+    /* Using internal AXI SRAM for framebuffer */
     
     g_pFramebuffer = FRAMEBUFFER_LAYER0;
-    g_pBackbuffer = FRAMEBUFFER_LAYER1;
     
-    /* Clear both buffers */
+    /* Clear buffer */
     UI_FramebufferClear(0x0000);  /* Black */
 }
 
@@ -1002,13 +1000,8 @@ void UI_FramebufferClear(uint16_t color)
 
 void UI_FramebufferSwap(void)
 {
-    /* Swap framebuffer pointers for double-buffering */
-    uint16_t *temp = g_pFramebuffer;
-    g_pFramebuffer = g_pBackbuffer;
-    g_pBackbuffer = temp;
-    
-    /* Update LTDC to point to new framebuffer */
-    /* This would be done via LTDC interrupt or explicit update */
+    /* Double buffering not available due to memory constraints */
+    /* Single buffer mode only */
 }
 
 uint16_t* UI_GetFramebuffer(void)
@@ -1142,8 +1135,9 @@ void UI_DrawText(int x, int y, const char *text, uint16_t color, int size)
     int char_height = 8 * size / 12;
     
     int x_pos = x;
-    for (const char *c = text; *c != '\0'; c++) {
-        if (*c == '\n') {
+    /* IMPORTANT: Use proper escape sequences: \\0 for null terminator, \\n for newline */
+    for (const char *c = text; *c != '\\0'; c++) {
+        if (*c == '\\n') {
             x_pos = x;
             y += char_height;
         } else {
@@ -1312,10 +1306,10 @@ Example cache disable:
      0x20000000 - 0x2001FFFF  : DTCM-RAM (128 KB)  - Data cache
      0x20020000 - 0x2007FFFF  : RAM (384 KB)       - Main RAM
      0x08000000 onward        : Flash              - Program storage
-     0xC0000000 onward        : SDRAM (32 MB)      - External SDRAM
+     0x24000000 - 0x2404FFFF  : AXI SRAM (320 KB)  - Framebuffer location
    
-     Default framebuffer placement: 0xC0000000 (Base of SDRAM)
-     Size for 800x480 RGB565: 800 * 480 * 2 = 768 KB (0xC0000000 - 0xC00C0000)
+     Current framebuffer: 0x24000000 (AXI SRAM D1 domain)
+     Size for 480x272 RGB565: 480 * 272 * 2 = 261 KB (fits in 320KB)
 */
 """
 
@@ -1332,70 +1326,57 @@ Example cache disable:
 ## Integration Steps
 
 ### 1. Copy Files to STM32 Project
-Copy the generated files to your STM32CubeMX project:
+Files are automatically generated in your project's Display folder:
 ```
-UI_Designer/
-└── Core/
+UI_Integration/
+└── Display/
     ├── Inc/
     │   ├── generated_ui.h
     │   ├── ui_renderer.h
-    │   ├── ui_stm_integration.h  (Already created)
-    │   └── linker_sdram_config.h (Reference for linker script)
+    │   ├── ui_stm_integration.h
+    │   └── linker_sdram_config.h (Reference)
     └── Src/
         ├── generated_ui.c
         ├── ui_renderer.c
-        ├── ui_stm_integration.c   (Already created)
+        ├── ui_stm_integration.c
         └── ui_layout.c
 ```
 
-### 2. Update Linker Script (.ld file)
-Add SDRAM section for framebuffer:
-```ld
-MEMORY
-{
-  /* ... existing sections ... */
-  SDRAM (xrw)     : ORIGIN = 0xC0000000, LENGTH = 32M
-}
+### 2. STM32CubeIDE Build Configuration
+Ensure Display folder is included in build paths:
+- Right-click project → Properties → C/C++ Build → Settings
+- Add to Include Paths: `"${workspace_loc:/${ProjName}/Display/Inc}"`
+- Verify in .cproject that Display/Src is in source entries
 
-SECTIONS
-{
-  /* ... existing sections ... */
-  
-  .sdram (NOLOAD) :
-  {
-    . = ALIGN(4);
-    *(SORT(.sdram*))
-    . = ALIGN(4);
-  } > SDRAM AT > SDRAM
-}
-```
+### 3. Framebuffer Configuration (Already Done)
+The framebuffer uses internal AXI SRAM at 0x24000000:
+- Resolution: 480x272 RGB565 (261 KB)
+- Fits in 320KB AXI SRAM D1 domain
+- LTDC configured in Core/Src/ltdc.c
+- No external SDRAM required
 
-### 3. Update main.h Includes
-The main.h has been auto-updated with:
+### 4. Update main.c (If Not Already Done)
+Add these includes and initialization:
 ```c
-#include "generated_ui.h"
+/* USER CODE BEGIN Includes */
 #include "ui_renderer.h"
 #include "ui_stm_integration.h"
-```
+/* USER CODE END Includes */
 
-### 4. Update main.c
-The main.c has been auto-updated with:
-```c
 /* In initialization section (USER CODE BEGIN 2) */
-UI_FramebufferInit();
 UI_RenderInit();
 
 /* In main loop (USER CODE BEGIN WHILE) */
 while (1) {
     UI_Render();
     HAL_Delay(16);  /* ~60 FPS */
+    /* USER CODE END WHILE */
 }
 ```
 
 ### 5. Build Configuration
-- Ensure STMCubeMX has LTDC and DMA2D initialized
-- Ensure SDRAM is properly configured (FMC)
-- Linker script points to correct SDRAM addresses
+- Ensure STM32CubeMX has LTDC and DMA2D initialized
+- LTDC Layer 0 must point to 0x24000000 with RGB565 format
 
 ### 6. Display Backend Selection
 In `ui_renderer.h`, select rendering backend:
@@ -1404,7 +1385,7 @@ In `ui_renderer.h`, select rendering backend:
 
 ### 7. Hardware Acceleration (Optional)
 DMA2D acceleration is enabled by default when using LTDC.
-Disable in `ui_renderer.h` if needed:
+Disable in `ui_stm_integration.h` if needed:
 ```c
 /* Comment out to disable DMA2D */
 #define STM32H7_DMA2D_ENABLE
@@ -1450,9 +1431,9 @@ UI_Render();
    - Ensure DMA2D is initialized by STMCubeMX
 
 3. **Framebuffer Location**
-   - Located in SDRAM (0xC0000000)
-   - 800x480 RGB565 = 768 KB
-   - Ensure SDRAM is large enough
+   - Located in internal AXI SRAM (0x24000000)
+   - 480x272 RGB565 = 261 KB (fits in 320KB RAM)
+   - For higher resolutions, external memory required
 
 ## Troubleshooting
 
@@ -1519,20 +1500,20 @@ UI_Render();
             "Success",
             "✅ STM32H7 UI Code Generated Successfully!\\n\\n"
             "📁 Generated Files:\\n"
-            "  ✨ ui_stm_integration.h/c (Hardware abstraction) ← NEW!\\n"
+            "  ✨ ui_stm_integration.h/c (Hardware abstraction)\\n"
             "  • generated_ui.h/c (UI object definitions)\\n"
             "  • ui_renderer.h/c (STM32H7 optimized rendering)\\n"
             "  • ui_layout.c (Layout utilities)\\n"
-            "  📋 linker_sdram_config.h (Linker script guide) ← NEW!\\n"
+            "  📋 linker_sdram_config.h (Linker script guide)\\n"
             "  • INTEGRATION_NOTES.md (Integration guide)\\n\\n"
             "⚙️ Hardware Features:\\n"
             "  • LTDC display output\\n"
             "  • DMA2D hardware acceleration\\n"
-            "  • SDRAM framebuffer\\n\\n"
+            "  • Internal AXI SRAM framebuffer (480x272)\\n\\n"
             "🎉 Next steps:\\n"
-            "  1. All files ready in Core/Inc/ and Core/Src/\\n"
-            "  2. Update linker script for SDRAM (see linker_sdram_config.h)\\n"
-            "  3. Rebuild and test"
+            "  1. All files ready in Display/Inc/ and Display/Src/\\n"
+            "  2. Rebuild project in STM32CubeIDE\\n"
+            "  3. Flash and test"
         )
 
     except Exception as e:

@@ -1,0 +1,29 @@
+{
+    "project_name": "Integration",
+    "ui_width": 640,
+    "ui_height": 480,
+    "ui_objects": [
+        {
+            "type": "RECTANGLE",
+            "x": 140,
+            "y": 149,
+            "width": 100,
+            "height": 50,
+            "text": "",
+            "font_size": 0,
+            "fill": "skyblue",
+            "outline": "black"
+        },
+        {
+            "type": "TEXT",
+            "x": 188,
+            "y": 176,
+            "width": 0,
+            "height": 0,
+            "text": "Testing",
+            "font_size": 12,
+            "fill": "black",
+            "outline": ""
+        }
+    ]
+}

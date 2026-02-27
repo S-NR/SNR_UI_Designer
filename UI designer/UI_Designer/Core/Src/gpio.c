@@ -38,6 +38,8 @@
         * Output
         * EVENT_OUT
         * EXTI
+        * Free pins are configured automatically as Analog (this feature is enabled through
+        * the Code Generation settings)
      PE4   ------> SAI4_D2
      PA10   ------> USB_OTG_HS_ID
      PE5   ------> SAI4_CK2

@@ -8,70 +8,57 @@
 ## Integration Steps
 
 ### 1. Copy Files to STM32 Project
-Copy the generated files to your STM32CubeMX project:
+Files are automatically generated in your project's Display folder:
 ```
-UI_Designer/
-└── Core/
+UI_Integration/
+└── Display/
     ├── Inc/
     │   ├── generated_ui.h
     │   ├── ui_renderer.h
-    │   ├── ui_stm_integration.h  (Already created)
-    │   └── linker_sdram_config.h (Reference for linker script)
+    │   ├── ui_stm_integration.h
+    │   └── linker_sdram_config.h (Reference)
     └── Src/
         ├── generated_ui.c
         ├── ui_renderer.c
-        ├── ui_stm_integration.c   (Already created)
+        ├── ui_stm_integration.c
         └── ui_layout.c
 ```
 
-### 2. Update Linker Script (.ld file)
-Add SDRAM section for framebuffer:
-```ld
-MEMORY
-{
-  /* ... existing sections ... */
-  SDRAM (xrw)     : ORIGIN = 0xC0000000, LENGTH = 32M
-}
+### 2. STM32CubeIDE Build Configuration
+Ensure Display folder is included in build paths:
+- Right-click project → Properties → C/C++ Build → Settings
+- Add to Include Paths: `"${workspace_loc:/${ProjName}/Display/Inc}"`
+- Verify in .cproject that Display/Src is in source entries
 
-SECTIONS
-{
-  /* ... existing sections ... */
-  
-  .sdram (NOLOAD) :
-  {
-    . = ALIGN(4);
-    *(SORT(.sdram*))
-    . = ALIGN(4);
-  } > SDRAM AT > SDRAM
-}
-```
+### 3. Framebuffer Configuration (Already Done)
+The framebuffer uses internal AXI SRAM at 0x24000000:
+- Resolution: 480x272 RGB565 (261 KB)
+- Fits in 320KB AXI SRAM D1 domain
+- LTDC configured in Core/Src/ltdc.c
+- No external SDRAM required
 
-### 3. Update main.h Includes
-The main.h has been auto-updated with:
+### 4. Update main.c (If Not Already Done)
+Add these includes and initialization:
 ```c
-#include "generated_ui.h"
+/* USER CODE BEGIN Includes */
 #include "ui_renderer.h"
 #include "ui_stm_integration.h"
-```
+/* USER CODE END Includes */
 
-### 4. Update main.c
-The main.c has been auto-updated with:
-```c
 /* In initialization section (USER CODE BEGIN 2) */
-UI_FramebufferInit();
 UI_RenderInit();
 
 /* In main loop (USER CODE BEGIN WHILE) */
 while (1) {
     UI_Render();
     HAL_Delay(16);  /* ~60 FPS */
+    /* USER CODE END WHILE */
 }
 ```
 
 ### 5. Build Configuration
-- Ensure STMCubeMX has LTDC and DMA2D initialized
-- Ensure SDRAM is properly configured (FMC)
-- Linker script points to correct SDRAM addresses
+- Ensure STM32CubeMX has LTDC and DMA2D initialized
+- LTDC Layer 0 must point to 0x24000000 with RGB565 format
 
 ### 6. Display Backend Selection
 In `ui_renderer.h`, select rendering backend:
@@ -80,7 +67,7 @@ In `ui_renderer.h`, select rendering backend:
 
 ### 7. Hardware Acceleration (Optional)
 DMA2D acceleration is enabled by default when using LTDC.
-Disable in `ui_renderer.h` if needed:
+Disable in `ui_stm_integration.h` if needed:
 ```c
 /* Comment out to disable DMA2D */
 #define STM32H7_DMA2D_ENABLE
@@ -126,9 +113,9 @@ UI_Render();
    - Ensure DMA2D is initialized by STMCubeMX
 
 3. **Framebuffer Location**
-   - Located in SDRAM (0xC0000000)
-   - 800x480 RGB565 = 768 KB
-   - Ensure SDRAM is large enough
+   - Located in internal AXI SRAM (0x24000000)
+   - 480x272 RGB565 = 261 KB (fits in 320KB RAM)
+   - For higher resolutions, external memory required
 
 ## Troubleshooting
 

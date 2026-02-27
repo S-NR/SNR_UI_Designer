@@ -137,12 +137,6 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
-    /* Render UI to display */
-    UI_Render();
-    
-    /* Optional: Add FPS limiting */
-    HAL_Delay(16);  /* ~60 FPS at 16ms per frame */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
